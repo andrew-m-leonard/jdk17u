@@ -64,6 +64,7 @@
 #pragma GCC diagnostic error   "-Wbitwise-instead-of-logical"
 #pragma GCC diagnostic error   "-Wcast-align"
 #pragma GCC diagnostic error   "-Wcast-function-type"
+#pragma GCC diagnostic error   "-Wconstant-conversion"
 #pragma GCC diagnostic error   "-Wcomma"
 #pragma GCC diagnostic error   "-Wdelete-non-virtual-dtor"
 #pragma GCC diagnostic error   "-Wembedded-directive"
@@ -115,11 +116,11 @@
 
 /* Ignored currently, but should be fixed at some point. */
 #ifndef HB_NO_PRAGMA_GCC_DIAGNOSTIC_IGNORED
-#pragma GCC diagnostic ignored "-Wconversion"                   // TODO fix
-#pragma GCC diagnostic ignored "-Wshadow"                       // TODO fix
-#pragma GCC diagnostic ignored "-Wunused-parameter"             // TODO fix
+#pragma GCC diagnostic ignored "-Wconversion"			// TODO fix
+#pragma GCC diagnostic ignored "-Wshadow"			// TODO fix
+#pragma GCC diagnostic ignored "-Wunused-parameter"		// TODO fix
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic ignored "-Wunused-result"                // TODO fix
+#pragma GCC diagnostic ignored "-Wunused-result"		// TODO fix
 #endif
 #endif
 
@@ -255,8 +256,8 @@ extern "C" void  hb_free_impl(void *ptr);
 #endif
 
 #if defined(__OPTIMIZE__) && hb_has_builtin(__builtin_expect)
-#define likely(expr) (__builtin_expect (!!(expr), 1))
-#define unlikely(expr) (__builtin_expect (!!(expr), 0))
+#define likely(expr) __builtin_expect (bool(expr), 1)
+#define unlikely(expr) __builtin_expect (bool(expr), 0)
 #else
 #define likely(expr) (expr)
 #define unlikely(expr) (expr)
@@ -273,7 +274,7 @@ extern "C" void  hb_free_impl(void *ptr);
 #define HB_PRINTF_FUNC(format_idx, arg_idx)
 #endif
 #if defined(__GNUC__) && (__GNUC__ >= 4) || (__clang__)
-#define HB_UNUSED       __attribute__((unused))
+#define HB_UNUSED	__attribute__((unused))
 #elif defined(_MSC_VER) /* https://github.com/harfbuzz/harfbuzz/issues/635 */
 #define HB_UNUSED __pragma(warning(suppress: 4100 4101))
 #else
@@ -313,6 +314,14 @@ extern "C" void  hb_free_impl(void *ptr);
 #if defined(__SUNPRO_CC) && (__SUNPRO_CC < 0x5140)
 /* https://github.com/harfbuzz/harfbuzz/issues/630 */
 #define __restrict
+#endif
+
+#ifndef HB_ALWAYS_INLINE
+#if defined(_MSC_VER)
+#define HB_ALWAYS_INLINE __forceinline
+#else
+#define HB_ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
 #endif
 
 /*
@@ -522,13 +531,13 @@ static_assert ((sizeof (hb_var_int_t) == 4), "");
 #include "hb-meta.hh"
 #include "hb-mutex.hh"
 #include "hb-number.hh"
-#include "hb-atomic.hh" // Requires: hb-meta
-#include "hb-null.hh"   // Requires: hb-meta
-#include "hb-algs.hh"   // Requires: hb-meta hb-null hb-number
-#include "hb-iter.hh"   // Requires: hb-algs hb-meta
-#include "hb-debug.hh"  // Requires: hb-algs hb-atomic
-#include "hb-array.hh"  // Requires: hb-algs hb-iter hb-null
-#include "hb-vector.hh" // Requires: hb-array hb-null
-#include "hb-object.hh" // Requires: hb-atomic hb-mutex hb-vector
+#include "hb-atomic.hh"	// Requires: hb-meta
+#include "hb-null.hh"	// Requires: hb-meta
+#include "hb-algs.hh"	// Requires: hb-meta hb-null hb-number
+#include "hb-iter.hh"	// Requires: hb-algs hb-meta
+#include "hb-debug.hh"	// Requires: hb-algs hb-atomic
+#include "hb-array.hh"	// Requires: hb-algs hb-iter hb-null
+#include "hb-vector.hh"	// Requires: hb-array hb-null
+#include "hb-object.hh"	// Requires: hb-atomic hb-mutex hb-vector
 
 #endif /* HB_HH */

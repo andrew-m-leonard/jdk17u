@@ -52,8 +52,9 @@ struct PairSet
 
     unsigned int count = len;
     const PairValueRecord *record = &firstPairValueRecord;
-    return_trace (closure->valueFormats[0].sanitize_values_stride_unsafe (c, this, &record->values[0], count, closure->stride) &&
-                  closure->valueFormats[1].sanitize_values_stride_unsafe (c, this, &record->values[closure->len1], count, closure->stride));
+    return_trace (c->lazy_some_gpos ||
+		  (closure->valueFormats[0].sanitize_values_stride_unsafe (c, this, &record->values[0], count, closure->stride) &&
+                   closure->valueFormats[1].sanitize_values_stride_unsafe (c, this, &record->values[closure->len1], count, closure->stride)));
   }
 
   bool intersects (const hb_set_t *glyphs,
@@ -115,27 +116,27 @@ struct PairSet
     {
       if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
       {
-        c->buffer->message (c->font,
-                            "try kerning glyphs at %u,%u",
-                            c->buffer->idx, pos);
+	c->buffer->message (c->font,
+			    "try kerning glyphs at %u,%u",
+			    c->buffer->idx, pos);
       }
 
-      bool applied_first = valueFormats[0].apply_value (c, this, &record->values[0], buffer->cur_pos());
-      bool applied_second = valueFormats[1].apply_value (c, this, &record->values[len1], buffer->pos[pos]);
+      bool applied_first = len1 && valueFormats[0].apply_value (c, this, &record->values[0], buffer->cur_pos());
+      bool applied_second = len2 && valueFormats[1].apply_value (c, this, &record->values[len1], buffer->pos[pos]);
 
       if (applied_first || applied_second)
-        if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
-        {
-          c->buffer->message (c->font,
-                              "kerned glyphs at %u,%u",
-                              c->buffer->idx, pos);
-        }
+	if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
+	{
+	  c->buffer->message (c->font,
+			      "kerned glyphs at %u,%u",
+			      c->buffer->idx, pos);
+	}
 
       if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
       {
-        c->buffer->message (c->font,
-                            "tried kerning glyphs at %u,%u",
-                            c->buffer->idx, pos);
+	c->buffer->message (c->font,
+			    "tried kerning glyphs at %u,%u",
+			    c->buffer->idx, pos);
       }
 
       if (applied_first || applied_second)
@@ -143,7 +144,7 @@ struct PairSet
 
       if (len2)
       {
-        pos++;
+	pos++;
       // https://github.com/harfbuzz/harfbuzz/issues/3824
       // https://github.com/harfbuzz/harfbuzz/issues/3888#issuecomment-1326781116
       buffer->unsafe_to_break (buffer->idx, pos + 1);

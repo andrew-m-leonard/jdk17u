@@ -31,6 +31,7 @@
 
 #include "hb-aat-layout-common.hh"
 #include "hb-aat-layout-feat-table.hh"
+#include "hb-cff-interp-common.hh"
 #include "hb-ot-layout-common.hh"
 #include "hb-ot-cmap-table.hh"
 #include "OT/Color/COLR/COLR.hh"
@@ -58,6 +59,8 @@ DEFINE_NULL_NAMESPACE_BYTES (AAT, Lookup) = {0xFF,0xFF};
 /* hb_map_t */
 
 const hb_codepoint_t minus_1 = -1;
+static const unsigned char static_endchar_str[] = {OpCode_endchar};
+const unsigned char *endchar_str = static_endchar_str;
 
 /* hb_face_t */
 
@@ -113,7 +116,7 @@ hb_face_t::load_upem () const
 #ifndef HB_NO_VAR
 bool
 _glyf_get_leading_bearing_with_var_unscaled (hb_font_t *font, hb_codepoint_t glyph, bool is_vertical,
-                                             int *lsb)
+					     int *lsb)
 {
   return font->face->table.glyf->get_leading_bearing_with_var_unscaled (font, glyph, is_vertical, lsb);
 }

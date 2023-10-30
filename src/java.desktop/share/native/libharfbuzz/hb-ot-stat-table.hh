@@ -39,23 +39,33 @@ namespace OT {
 
 enum
 {
-  OLDER_SIBLING_FONT_ATTRIBUTE = 0x0001,        /* If set, this axis value table
-                                                 * provides axis value information
-                                                 * that is applicable to other fonts
-                                                 * within the same font family. This
-                                                 * is used if the other fonts were
-                                                 * released earlier and did not include
-                                                 * information about values for some axis.
-                                                 * If newer versions of the other
-                                                 * fonts include the information
-                                                 * themselves and are present,
-                                                 * then this record is ignored. */
-  ELIDABLE_AXIS_VALUE_NAME = 0x0002             /* If set, it indicates that the axis
-                                                 * value represents the “normal” value
-                                                 * for the axis and may be omitted when
-                                                 * composing name strings. */
-  // Reserved = 0xFFFC                          /* Reserved for future use — set to zero. */
+  OLDER_SIBLING_FONT_ATTRIBUTE = 0x0001,	/* If set, this axis value table
+						 * provides axis value information
+						 * that is applicable to other fonts
+						 * within the same font family. This
+						 * is used if the other fonts were
+						 * released earlier and did not include
+						 * information about values for some axis.
+						 * If newer versions of the other
+						 * fonts include the information
+						 * themselves and are present,
+						 * then this record is ignored. */
+  ELIDABLE_AXIS_VALUE_NAME = 0x0002		/* If set, it indicates that the axis
+						 * value represents the “normal” value
+						 * for the axis and may be omitted when
+						 * composing name strings. */
+  // Reserved = 0xFFFC				/* Reserved for future use — set to zero. */
 };
+
+static bool axis_value_is_outside_axis_range (hb_tag_t axis_tag, float axis_value,
+                                              const hb_hashmap_t<hb_tag_t, Triple> *user_axes_location)
+{
+  if (!user_axes_location->has (axis_tag))
+    return false;
+
+  Triple axis_range = user_axes_location->get (axis_tag);
+  return (axis_value < axis_range.minimum || axis_value > axis_range.maximum);
+}
 
 struct StatAxisRecord
 {
@@ -72,12 +82,12 @@ struct StatAxisRecord
   }
 
   protected:
-  Tag           tag;            /* A tag identifying the axis of design variation. */
-  NameID        nameID;         /* The name ID for entries in the 'name' table that
-                                 * provide a display string for this axis. */
-  HBUINT16      ordering;       /* A value that applications can use to determine
-                                 * primary sorting of face names, or for ordering
-                                 * of descriptors when composing family or face names. */
+  Tag		tag;		/* A tag identifying the axis of design variation. */
+  NameID	nameID;		/* The name ID for entries in the 'name' table that
+				 * provide a display string for this axis. */
+  HBUINT16	ordering;	/* A value that applications can use to determine
+				 * primary sorting of face names, or for ordering
+				 * of descriptors when composing family or face names. */
   public:
   DEFINE_SIZE_STATIC (8);
 };
@@ -96,23 +106,19 @@ struct AxisValueFormat1
   }
 
   bool keep_axis_value (const hb_array_t<const StatAxisRecord> axis_records,
-                        const hb_hashmap_t<hb_tag_t, float> *user_axes_location) const
+                        const hb_hashmap_t<hb_tag_t, Triple> *user_axes_location) const
   {
     hb_tag_t axis_tag = get_axis_tag (axis_records);
     float axis_value = get_value ();
 
-    if (!user_axes_location->has (axis_tag) ||
-        fabsf(axis_value - user_axes_location->get (axis_tag)) < 0.001f)
-      return true;
-
-    return false;
+    return !axis_value_is_outside_axis_range (axis_tag, axis_value, user_axes_location);
   }
 
   bool subset (hb_subset_context_t *c,
                const hb_array_t<const StatAxisRecord> axis_records) const
   {
     TRACE_SUBSET (this);
-    const hb_hashmap_t<hb_tag_t, float>* user_axes_location = &c->plan->user_axes_location;
+    const hb_hashmap_t<hb_tag_t, Triple>* user_axes_location = &c->plan->user_axes_location;
 
     if (keep_axis_value (axis_records, user_axes_location))
       return_trace (c->serializer->embed (this));
@@ -127,16 +133,16 @@ struct AxisValueFormat1
   }
 
   protected:
-  HBUINT16      format;         /* Format identifier — set to 1. */
-  HBUINT16      axisIndex;      /* Zero-base index into the axis record array
-                                 * identifying the axis of design variation
-                                 * to which the axis value record applies.
-                                 * Must be less than designAxisCount. */
-  HBUINT16      flags;          /* Flags — see below for details. */
-  NameID        valueNameID;    /* The name ID for entries in the 'name' table
-                                 * that provide a display string for this
-                                 * attribute value. */
-  F16DOT16      value;          /* A numeric value for this attribute value. */
+  HBUINT16	format;		/* Format identifier — set to 1. */
+  HBUINT16	axisIndex;	/* Zero-base index into the axis record array
+				 * identifying the axis of design variation
+				 * to which the axis value record applies.
+				 * Must be less than designAxisCount. */
+  HBUINT16	flags;		/* Flags — see below for details. */
+  NameID	valueNameID;	/* The name ID for entries in the 'name' table
+				 * that provide a display string for this
+				 * attribute value. */
+  F16DOT16	value;		/* A numeric value for this attribute value. */
   public:
   DEFINE_SIZE_STATIC (12);
 };
@@ -155,23 +161,19 @@ struct AxisValueFormat2
   }
 
   bool keep_axis_value (const hb_array_t<const StatAxisRecord> axis_records,
-                        const hb_hashmap_t<hb_tag_t, float> *user_axes_location) const
+                        const hb_hashmap_t<hb_tag_t, Triple> *user_axes_location) const
   {
     hb_tag_t axis_tag = get_axis_tag (axis_records);
     float axis_value = get_value ();
 
-    if (!user_axes_location->has (axis_tag) ||
-        fabsf(axis_value - user_axes_location->get (axis_tag)) < 0.001f)
-      return true;
-
-    return false;
+    return !axis_value_is_outside_axis_range (axis_tag, axis_value, user_axes_location);
   }
 
   bool subset (hb_subset_context_t *c,
                const hb_array_t<const StatAxisRecord> axis_records) const
   {
     TRACE_SUBSET (this);
-    const hb_hashmap_t<hb_tag_t, float>* user_axes_location = &c->plan->user_axes_location;
+    const hb_hashmap_t<hb_tag_t, Triple>* user_axes_location = &c->plan->user_axes_location;
 
     if (keep_axis_value (axis_records, user_axes_location))
       return_trace (c->serializer->embed (this));
@@ -186,20 +188,20 @@ struct AxisValueFormat2
   }
 
   protected:
-  HBUINT16      format;         /* Format identifier — set to 2. */
-  HBUINT16      axisIndex;      /* Zero-base index into the axis record array
-                                 * identifying the axis of design variation
-                                 * to which the axis value record applies.
-                                 * Must be less than designAxisCount. */
-  HBUINT16      flags;          /* Flags — see below for details. */
-  NameID        valueNameID;    /* The name ID for entries in the 'name' table
-                                 * that provide a display string for this
-                                 * attribute value. */
-  F16DOT16      nominalValue;   /* A numeric value for this attribute value. */
-  F16DOT16      rangeMinValue;  /* The minimum value for a range associated
-                                 * with the specified name ID. */
-  F16DOT16      rangeMaxValue;  /* The maximum value for a range associated
-                                 * with the specified name ID. */
+  HBUINT16	format;		/* Format identifier — set to 2. */
+  HBUINT16	axisIndex;	/* Zero-base index into the axis record array
+				 * identifying the axis of design variation
+				 * to which the axis value record applies.
+				 * Must be less than designAxisCount. */
+  HBUINT16	flags;		/* Flags — see below for details. */
+  NameID	valueNameID;	/* The name ID for entries in the 'name' table
+				 * that provide a display string for this
+				 * attribute value. */
+  F16DOT16	nominalValue;	/* A numeric value for this attribute value. */
+  F16DOT16	rangeMinValue;	/* The minimum value for a range associated
+				 * with the specified name ID. */
+  F16DOT16	rangeMaxValue;	/* The maximum value for a range associated
+				 * with the specified name ID. */
   public:
   DEFINE_SIZE_STATIC (20);
 };
@@ -218,23 +220,19 @@ struct AxisValueFormat3
   }
 
   bool keep_axis_value (const hb_array_t<const StatAxisRecord> axis_records,
-                        const hb_hashmap_t<hb_tag_t, float> *user_axes_location) const
+                        const hb_hashmap_t<hb_tag_t, Triple> *user_axes_location) const
   {
     hb_tag_t axis_tag = get_axis_tag (axis_records);
     float axis_value = get_value ();
 
-    if (!user_axes_location->has (axis_tag) ||
-        fabsf(axis_value - user_axes_location->get (axis_tag)) < 0.001f)
-      return true;
-
-    return false;
+    return !axis_value_is_outside_axis_range (axis_tag, axis_value, user_axes_location);
   }
 
   bool subset (hb_subset_context_t *c,
                const hb_array_t<const StatAxisRecord> axis_records) const
   {
     TRACE_SUBSET (this);
-    const hb_hashmap_t<hb_tag_t, float>* user_axes_location = &c->plan->user_axes_location;
+    const hb_hashmap_t<hb_tag_t, Triple>* user_axes_location = &c->plan->user_axes_location;
 
     if (keep_axis_value (axis_records, user_axes_location))
       return_trace (c->serializer->embed (this));
@@ -249,18 +247,18 @@ struct AxisValueFormat3
   }
 
   protected:
-  HBUINT16      format;         /* Format identifier — set to 3. */
-  HBUINT16      axisIndex;      /* Zero-base index into the axis record array
-                                 * identifying the axis of design variation
-                                 * to which the axis value record applies.
-                                 * Must be less than designAxisCount. */
-  HBUINT16      flags;          /* Flags — see below for details. */
-  NameID        valueNameID;    /* The name ID for entries in the 'name' table
-                                 * that provide a display string for this
-                                 * attribute value. */
-  F16DOT16      value;          /* A numeric value for this attribute value. */
-  F16DOT16      linkedValue;    /* The numeric value for a style-linked mapping
-                                 * from this value. */
+  HBUINT16	format;		/* Format identifier — set to 3. */
+  HBUINT16	axisIndex;	/* Zero-base index into the axis record array
+				 * identifying the axis of design variation
+				 * to which the axis value record applies.
+				 * Must be less than designAxisCount. */
+  HBUINT16	flags;		/* Flags — see below for details. */
+  NameID	valueNameID;	/* The name ID for entries in the 'name' table
+				 * that provide a display string for this
+				 * attribute value. */
+  F16DOT16	value;		/* A numeric value for this attribute value. */
+  F16DOT16	linkedValue;	/* The numeric value for a style-linked mapping
+				 * from this value. */
   public:
   DEFINE_SIZE_STATIC (16);
 };
@@ -277,10 +275,10 @@ struct AxisValueRecord
   }
 
   protected:
-  HBUINT16      axisIndex;      /* Zero-base index into the axis record array
-                                 * identifying the axis to which this value
-                                 * applies. Must be less than designAxisCount. */
-  F16DOT16      value;          /* A numeric value for this attribute value. */
+  HBUINT16	axisIndex;	/* Zero-base index into the axis record array
+				 * identifying the axis to which this value
+				 * applies. Must be less than designAxisCount. */
+  F16DOT16	value;		/* A numeric value for this attribute value. */
   public:
   DEFINE_SIZE_STATIC (6);
 };
@@ -291,7 +289,7 @@ struct AxisValueFormat4
   { return axisValues.as_array (axisCount)[axis_index]; }
 
   bool keep_axis_value (const hb_array_t<const StatAxisRecord> axis_records,
-                        const hb_hashmap_t<hb_tag_t, float> *user_axes_location) const
+                        const hb_hashmap_t<hb_tag_t, Triple> *user_axes_location) const
   {
     hb_array_t<const AxisValueRecord> axis_value_records = axisValues.as_array (axisCount);
 
@@ -301,8 +299,7 @@ struct AxisValueFormat4
       float axis_value = rec.get_value ();
       hb_tag_t axis_tag = axis_records[axis_idx].get_axis_tag ();
 
-      if (user_axes_location->has (axis_tag) &&
-          fabsf(axis_value - user_axes_location->get (axis_tag)) > 0.001f)
+      if (axis_value_is_outside_axis_range (axis_tag, axis_value, user_axes_location))
         return false;
     }
 
@@ -313,7 +310,7 @@ struct AxisValueFormat4
                const hb_array_t<const StatAxisRecord> axis_records) const
   {
     TRACE_SUBSET (this);
-    const hb_hashmap_t<hb_tag_t, float> *user_axes_location = &c->plan->user_axes_location;
+    const hb_hashmap_t<hb_tag_t, Triple> *user_axes_location = &c->plan->user_axes_location;
     if (!keep_axis_value (axis_records, user_axes_location))
       return_trace (false);
 
@@ -334,17 +331,17 @@ struct AxisValueFormat4
   }
 
   protected:
-  HBUINT16      format;         /* Format identifier — set to 4. */
-  HBUINT16      axisCount;      /* The total number of axes contributing to
-                                 * this axis-values combination. */
-  HBUINT16      flags;          /* Flags — see below for details. */
-  NameID        valueNameID;    /* The name ID for entries in the 'name' table
-                                 * that provide a display string for this
-                                 * attribute value. */
+  HBUINT16	format;		/* Format identifier — set to 4. */
+  HBUINT16	axisCount;	/* The total number of axes contributing to
+				 * this axis-values combination. */
+  HBUINT16	flags;		/* Flags — see below for details. */
+  NameID	valueNameID;	/* The name ID for entries in the 'name' table
+				 * that provide a display string for this
+				 * attribute value. */
   UnsizedArrayOf<AxisValueRecord>
-                axisValues;     /* Array of AxisValue records that provide the
-                                 * combination of axis values, one for each
-                                 * contributing axis. */
+		axisValues;	/* Array of AxisValue records that provide the
+				 * combination of axis values, one for each
+				 * contributing axis. */
   public:
   DEFINE_SIZE_ARRAY (8, axisValues);
 };
@@ -402,7 +399,7 @@ struct AxisValue
   }
 
   bool keep_axis_value (const hb_array_t<const StatAxisRecord> axis_records,
-                        hb_hashmap_t<hb_tag_t, float> *user_axes_location) const
+                        hb_hashmap_t<hb_tag_t, Triple> *user_axes_location) const
   {
     switch (u.format)
     {
@@ -433,11 +430,11 @@ struct AxisValue
   protected:
   union
   {
-  HBUINT16              format;
-  AxisValueFormat1      format1;
-  AxisValueFormat2      format2;
-  AxisValueFormat3      format3;
-  AxisValueFormat4      format4;
+  HBUINT16		format;
+  AxisValueFormat1	format1;
+  AxisValueFormat2	format2;
+  AxisValueFormat3	format3;
+  AxisValueFormat4	format4;
   } u;
   public:
   DEFINE_SIZE_UNION (2, format);
@@ -451,8 +448,6 @@ struct AxisValueOffsetArray: UnsizedArrayOf<Offset16To<AxisValue>>
                const hb_array_t<const StatAxisRecord> axis_records) const
   {
     TRACE_SUBSET (this);
-    auto *out = c->serializer->start_embed (this);
-    if (unlikely (!out)) return_trace (false);
 
     auto axisValueOffsets = as_array (axisValueCount);
     count = 0;
@@ -491,9 +486,9 @@ struct STAT
       const AxisValue& axis_value = this+axis_values[i];
       if (axis_value.get_axis_index () == axis_index)
       {
-        if (value)
-          *value = axis_value.get_value (axis_index);
-        return true;
+	if (value)
+	  *value = axis_value.get_value (axis_index);
+	return true;
       }
     }
     return false;
@@ -517,7 +512,7 @@ struct STAT
     return axis_value.get_value_name_id ();
   }
 
-  void collect_name_ids (hb_hashmap_t<hb_tag_t, float> *user_axes_location,
+  void collect_name_ids (hb_hashmap_t<hb_tag_t, Triple> *user_axes_location,
                          hb_set_t *nameids_to_retain /* OUT */) const
   {
     if (!has_data ()) return;
@@ -565,10 +560,10 @@ struct STAT
   {
     TRACE_SANITIZE (this);
     return_trace (likely (c->check_struct (this) &&
-                          version.major == 1 &&
-                          version.minor > 0 &&
-                          designAxesOffset.sanitize (c, this, designAxisCount) &&
-                          offsetToAxisValueOffsets.sanitize (c, this, axisValueCount, &(this+offsetToAxisValueOffsets))));
+			  version.major == 1 &&
+			  version.minor > 0 &&
+			  designAxesOffset.sanitize (c, this, designAxisCount) &&
+			  offsetToAxisValueOffsets.sanitize (c, this, axisValueCount, &(this+offsetToAxisValueOffsets))));
   }
 
   protected:
@@ -580,35 +575,35 @@ struct STAT
 
 
   protected:
-  FixedVersion<>version;        /* Version of the stat table
-                                 * initially set to 0x00010002u */
-  HBUINT16      designAxisSize; /* The size in bytes of each axis record. */
-  HBUINT16      designAxisCount;/* The number of design axis records. In a
-                                 * font with an 'fvar' table, this value must be
-                                 * greater than or equal to the axisCount value
-                                 * in the 'fvar' table. In all fonts, must
-                                 * be greater than zero if axisValueCount
-                                 * is greater than zero. */
+  FixedVersion<>version;	/* Version of the stat table
+				 * initially set to 0x00010002u */
+  HBUINT16	designAxisSize;	/* The size in bytes of each axis record. */
+  HBUINT16	designAxisCount;/* The number of design axis records. In a
+				 * font with an 'fvar' table, this value must be
+				 * greater than or equal to the axisCount value
+				 * in the 'fvar' table. In all fonts, must
+				 * be greater than zero if axisValueCount
+				 * is greater than zero. */
   NNOffset32To<UnsizedArrayOf<StatAxisRecord>>
-                designAxesOffset;
-                                /* Offset in bytes from the beginning of
-                                 * the STAT table to the start of the design
-                                 * axes array. If designAxisCount is zero,
-                                 * set to zero; if designAxisCount is greater
-                                 * than zero, must be greater than zero. */
-  HBUINT16      axisValueCount; /* The number of axis value tables. */
+		designAxesOffset;
+				/* Offset in bytes from the beginning of
+				 * the STAT table to the start of the design
+				 * axes array. If designAxisCount is zero,
+				 * set to zero; if designAxisCount is greater
+				 * than zero, must be greater than zero. */
+  HBUINT16	axisValueCount;	/* The number of axis value tables. */
   NNOffset32To<AxisValueOffsetArray>
-                offsetToAxisValueOffsets;
-                                /* Offset in bytes from the beginning of
-                                 * the STAT table to the start of the design
-                                 * axes value offsets array. If axisValueCount
-                                 * is zero, set to zero; if axisValueCount is
-                                 * greater than zero, must be greater than zero. */
-  NameID        elidedFallbackNameID;
-                                /* Name ID used as fallback when projection of
-                                 * names into a particular font model produces
-                                 * a subfamily name containing only elidable
-                                 * elements. */
+		offsetToAxisValueOffsets;
+				/* Offset in bytes from the beginning of
+				 * the STAT table to the start of the design
+				 * axes value offsets array. If axisValueCount
+				 * is zero, set to zero; if axisValueCount is
+				 * greater than zero, must be greater than zero. */
+  NameID	elidedFallbackNameID;
+				/* Name ID used as fallback when projection of
+				 * names into a particular font model produces
+				 * a subfamily name containing only elidable
+				 * elements. */
   public:
   DEFINE_SIZE_STATIC (20);
 };

@@ -35,6 +35,7 @@
 #include "hb-set.hh"
 #include "hb-cplusplus.hh"
 #include "hb-font.hh"
+#include "hb-subset-instancer-solver.hh"
 
 struct hb_ot_name_record_ids_t
 {
@@ -118,7 +119,8 @@ struct hb_subset_input_t
   // If set loca format will always be the long version.
   bool force_long_loca = false;
 
-  hb_hashmap_t<hb_tag_t, float> axes_location;
+  hb_hashmap_t<hb_tag_t, Triple> axes_location;
+  hb_map_t glyph_map;
 #ifdef HB_EXPERIMENTAL_API
   hb_hashmap_t<hb_ot_name_record_ids_t, hb_bytes_t> name_table_overrides;
 #endif
@@ -143,9 +145,9 @@ struct hb_subset_input_t
 
     return axes_location.in_error ()
 #ifdef HB_EXPERIMENTAL_API
-        || name_table_overrides.in_error ()
+	|| name_table_overrides.in_error ()
 #endif
-        ;
+	;
   }
 };
 

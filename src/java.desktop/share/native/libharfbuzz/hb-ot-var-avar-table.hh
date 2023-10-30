@@ -48,16 +48,16 @@ struct avarV2Tail
   friend struct avar;
 
   bool sanitize (hb_sanitize_context_t *c,
-                 const void *base) const
+		 const void *base) const
   {
     TRACE_SANITIZE (this);
     return_trace (varIdxMap.sanitize (c, base) &&
-                  varStore.sanitize (c, base));
+		  varStore.sanitize (c, base));
   }
 
   protected:
-  Offset32To<DeltaSetIndexMap>  varIdxMap;      /* Offset from the beginning of 'avar' table. */
-  Offset32To<VariationStore>    varStore;       /* Offset from the beginning of 'avar' table. */
+  Offset32To<DeltaSetIndexMap>	varIdxMap;	/* Offset from the beginning of 'avar' table. */
+  Offset32To<VariationStore>	varStore;	/* Offset from the beginning of 'avar' table. */
 
   public:
   DEFINE_SIZE_STATIC (8);
@@ -72,11 +72,70 @@ struct AxisValueMap
     return_trace (c->check_struct (this));
   }
 
+  void set_mapping (float from_coord, float to_coord)
+  {
+    coords[0].set_float (from_coord);
+    coords[1].set_float (to_coord);
+  }
+
+  bool is_outside_axis_range (const Triple& axis_range) const
+  {
+    float from_coord = coords[0].to_float ();
+    return !axis_range.contains (from_coord);
+  }
+
+  bool must_include () const
+  {
+    float from_coord = coords[0].to_float ();
+    float to_coord = coords[1].to_float ();
+    return (from_coord == -1.f && to_coord == -1.f) ||
+           (from_coord == 0.f && to_coord == 0.f) ||
+           (from_coord == 1.f && to_coord == 1.f);
+  }
+
+  void instantiate (const Triple& axis_range,
+                    const Triple& unmapped_range,
+                    const TripleDistances& triple_distances)
+  {
+    float from_coord = coords[0].to_float ();
+    float to_coord = coords[1].to_float ();
+
+    from_coord = renormalizeValue (from_coord, unmapped_range, triple_distances);
+    to_coord = renormalizeValue (to_coord, axis_range, triple_distances);
+
+    coords[0].set_float (from_coord);
+    coords[1].set_float (to_coord);
+  }
+
+  HB_INTERNAL static int cmp (const void *pa, const void *pb)
+  {
+    const AxisValueMap *a = (const AxisValueMap *) pa;
+    const AxisValueMap *b = (const AxisValueMap *) pb;
+
+    int a_from = a->coords[0].to_int ();
+    int b_from = b->coords[0].to_int ();
+    if (a_from != b_from)
+      return a_from - b_from;
+
+    /* this should never be reached. according to the spec, all of the axis
+     * value map records for a given axis must have different fromCoord values
+     * */
+    int a_to = a->coords[1].to_int ();
+    int b_to = b->coords[1].to_int ();
+    return a_to - b_to;
+  }
+
+  bool serialize (hb_serialize_context_t *c) const
+  {
+    TRACE_SERIALIZE (this);
+    return_trace (c->embed (this));
+  }
+
   public:
-  F2DOT14       coords[2];
-//   F2DOT14    fromCoord;      /* A normalized coordinate value obtained using
-//                               * default normalization. */
-//   F2DOT14    toCoord;        /* The modified, normalized coordinate value. */
+  F2DOT14	coords[2];
+//   F2DOT14	fromCoord;	/* A normalized coordinate value obtained using
+//				 * default normalization. */
+//   F2DOT14	toCoord;	/* The modified, normalized coordinate value. */
 
   public:
   DEFINE_SIZE_STATIC (4);
@@ -94,9 +153,9 @@ struct SegmentMaps : Array16Of<AxisValueMap>
     if (len < 2)
     {
       if (!len)
-        return value;
+	return value;
       else /* len == 1*/
-        return value - arrayZ[0].fromCoord + arrayZ[0].toCoord;
+	return value - arrayZ[0].fromCoord + arrayZ[0].toCoord;
     }
 
     if (value <= arrayZ[0].fromCoord)
@@ -115,12 +174,84 @@ struct SegmentMaps : Array16Of<AxisValueMap>
 
     int denom = arrayZ[i].fromCoord - arrayZ[i-1].fromCoord;
     return roundf (arrayZ[i-1].toCoord + ((float) (arrayZ[i].toCoord - arrayZ[i-1].toCoord) *
-                                          (value - arrayZ[i-1].fromCoord)) / denom);
+					  (value - arrayZ[i-1].fromCoord)) / denom);
 #undef toCoord
 #undef fromCoord
   }
 
   int unmap (int value) const { return map (value, 1, 0); }
+
+  Triple unmap_axis_range (const Triple& axis_range) const
+  {
+    F2DOT14 val, unmapped_val;
+
+    val.set_float (axis_range.minimum);
+    unmapped_val.set_int (unmap (val.to_int ()));
+    float unmapped_min = unmapped_val.to_float ();
+
+    val.set_float (axis_range.middle);
+    unmapped_val.set_int (unmap (val.to_int ()));
+    float unmapped_middle = unmapped_val.to_float ();
+
+    val.set_float (axis_range.maximum);
+    unmapped_val.set_int (unmap (val.to_int ()));
+    float unmapped_max = unmapped_val.to_float ();
+
+    return Triple{unmapped_min, unmapped_middle, unmapped_max};
+  }
+
+  bool subset (hb_subset_context_t *c, hb_tag_t axis_tag) const
+  {
+    TRACE_SUBSET (this);
+    /* avar mapped normalized axis range*/
+    Triple *axis_range;
+    if (!c->plan->axes_location.has (axis_tag, &axis_range))
+      return c->serializer->embed (*this);
+
+    TripleDistances *axis_triple_distances;
+    if (!c->plan->axes_triple_distances.has (axis_tag, &axis_triple_distances))
+      return_trace (false);
+
+    auto *out = c->serializer->start_embed (this);
+    if (unlikely (!c->serializer->extend_min (out))) return_trace (false);
+
+    Triple unmapped_range = unmap_axis_range (*axis_range);
+
+    /* create a vector of retained mappings and sort */
+    hb_vector_t<AxisValueMap> value_mappings;
+    for (const auto& _ : as_array ())
+    {
+      if (_.is_outside_axis_range (unmapped_range))
+        continue;
+      AxisValueMap mapping;
+      mapping = _;
+      mapping.instantiate (*axis_range, unmapped_range, *axis_triple_distances);
+      /* (-1, -1), (0, 0), (1, 1) mappings will be added later, so avoid
+       * duplicates here */
+      if (mapping.must_include ())
+        continue;
+      value_mappings.push (std::move (mapping));
+    }
+
+    AxisValueMap m;
+    m.set_mapping (-1.f, -1.f);
+    value_mappings.push (m);
+
+    m.set_mapping (0.f, 0.f);
+    value_mappings.push (m);
+
+    m.set_mapping (1.f, 1.f);
+    value_mappings.push (m);
+
+    value_mappings.qsort ();
+
+    for (const auto& _ : value_mappings)
+    {
+      if (!_.serialize (c->serializer))
+        return_trace (false);
+    }
+    return_trace (c->serializer->check_assign (out->len, value_mappings.length, HB_SERIALIZE_ERROR_INT_OVERFLOW));
+  }
 
   public:
   DEFINE_SIZE_ARRAY (2, *this);
@@ -142,12 +273,12 @@ struct avar
   {
     TRACE_SANITIZE (this);
     if (!(version.sanitize (c) &&
-          (version.major == 1
+	  (version.major == 1
 #ifndef HB_NO_AVAR2
-           || version.major == 2
+	   || version.major == 2
 #endif
-           ) &&
-          c->check_struct (this)))
+	   ) &&
+	  c->check_struct (this)))
       return_trace (false);
 
     const SegmentMaps *map = &firstAxisSegmentMaps;
@@ -155,7 +286,7 @@ struct avar
     for (unsigned int i = 0; i < count; i++)
     {
       if (unlikely (!map->sanitize (c)))
-        return_trace (false);
+	return_trace (false);
       map = &StructAfter<SegmentMaps> (*map);
     }
 
@@ -225,14 +356,47 @@ struct avar
     }
   }
 
+  bool subset (hb_subset_context_t *c) const
+  {
+    TRACE_SUBSET (this);
+    unsigned retained_axis_count = c->plan->axes_index_map.get_population ();
+    if (!retained_axis_count) //all axes are pinned/dropped
+      return_trace (false);
+
+    avar *out = c->serializer->allocate_min<avar> ();
+    if (unlikely (!out)) return_trace (false);
+
+    out->version.major = 1;
+    out->version.minor = 0;
+    if (!c->serializer->check_assign (out->axisCount, retained_axis_count, HB_SERIALIZE_ERROR_INT_OVERFLOW))
+      return_trace (false);
+
+    const hb_map_t& axes_index_map = c->plan->axes_index_map;
+    const SegmentMaps *map = &firstAxisSegmentMaps;
+    unsigned count = axisCount;
+    for (unsigned int i = 0; i < count; i++)
+    {
+      if (axes_index_map.has (i))
+      {
+        hb_tag_t *axis_tag;
+        if (!c->plan->axes_old_index_tag_map.has (i, &axis_tag))
+          return_trace (false);
+        if (!map->subset (c, *axis_tag))
+          return_trace (false);
+      }
+      map = &StructAfter<SegmentMaps> (*map);
+    }
+    return_trace (true);
+  }
+
   protected:
-  FixedVersion<>version;        /* Version of the avar table
-                                 * initially set to 0x00010000u */
-  HBUINT16      reserved;       /* This field is permanently reserved. Set to 0. */
-  HBUINT16      axisCount;      /* The number of variation axes in the font. This
-                                 * must be the same number as axisCount in the
-                                 * 'fvar' table. */
-  SegmentMaps   firstAxisSegmentMaps;
+  FixedVersion<>version;	/* Version of the avar table
+				 * initially set to 0x00010000u */
+  HBUINT16	reserved;	/* This field is permanently reserved. Set to 0. */
+  HBUINT16	axisCount;	/* The number of variation axes in the font. This
+				 * must be the same number as axisCount in the
+				 * 'fvar' table. */
+  SegmentMaps	firstAxisSegmentMaps;
 
   public:
   DEFINE_SIZE_MIN (8);

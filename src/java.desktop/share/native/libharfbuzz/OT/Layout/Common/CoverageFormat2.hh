@@ -95,18 +95,25 @@ struct CoverageFormat2_4
     unsigned count = 0;
     unsigned range = (unsigned) -1;
     last = (hb_codepoint_t) -2;
+    unsigned unsorted = false;
     for (auto g: glyphs)
     {
       if (last + 1 != g)
       {
+	if (unlikely (last != (hb_codepoint_t) -2 && last + 1 > g))
+	  unsorted = true;
+
         range++;
-        rangeRecord[range].first = g;
-        rangeRecord[range].value = count;
+        rangeRecord.arrayZ[range].first = g;
+        rangeRecord.arrayZ[range].value = count;
       }
-      rangeRecord[range].last = g;
+      rangeRecord.arrayZ[range].last = g;
       last = g;
       count++;
     }
+
+    if (unlikely (unsorted))
+      rangeRecord.as_array ().qsort (RangeRecord<Types>::cmp_range);
 
     return_trace (true);
   }
@@ -115,9 +122,9 @@ struct CoverageFormat2_4
   {
     if (rangeRecord.len > glyphs->get_population () * hb_bit_storage ((unsigned) rangeRecord.len) / 2)
     {
-      for (hb_codepoint_t g = HB_SET_VALUE_INVALID; glyphs->next (&g);)
+      for (auto g : *glyphs)
         if (get_coverage (g) != NOT_COVERED)
-          return true;
+	  return true;
       return false;
     }
 
@@ -133,7 +140,7 @@ struct CoverageFormat2_4
   }
 
   template <typename IterableOut,
-            hb_requires (hb_is_sink_of (IterableOut, hb_codepoint_t))>
+	    hb_requires (hb_is_sink_of (IterableOut, hb_codepoint_t))>
   void intersect_set (const hb_set_t &glyphs, IterableOut&& intersect_glyphs) const
   {
     /* Break out of loop for overlapping, broken, tables,
@@ -145,8 +152,8 @@ struct CoverageFormat2_4
         break;
       last = range.last;
       for (hb_codepoint_t g = range.first - 1;
-           glyphs.next (&g) && g <= last;)
-        intersect_glyphs << g;
+	   glyphs.next (&g) && g <= last;)
+	intersect_glyphs << g;
     }
   }
 
@@ -185,8 +192,8 @@ struct CoverageFormat2_4
         if (__more__ ())
         {
           unsigned int old = coverage;
-          j = c->rangeRecord[i].first;
-          coverage = c->rangeRecord[i].value;
+          j = c->rangeRecord.arrayZ[i].first;
+          coverage = c->rangeRecord.arrayZ[i].value;
           if (unlikely (coverage != old + 1))
           {
             /* Broken table. Skip. Important to avoid DoS.

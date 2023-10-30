@@ -32,6 +32,7 @@
 #define HB_PAINT_FUNCS_IMPLEMENT_CALLBACKS \
   HB_PAINT_FUNC_IMPLEMENT (push_transform) \
   HB_PAINT_FUNC_IMPLEMENT (pop_transform) \
+  HB_PAINT_FUNC_IMPLEMENT (color_glyph) \
   HB_PAINT_FUNC_IMPLEMENT (push_clip_glyph) \
   HB_PAINT_FUNC_IMPLEMENT (push_clip_rectangle) \
   HB_PAINT_FUNC_IMPLEMENT (pop_clip) \
@@ -77,6 +78,13 @@ struct hb_paint_funcs_t
   void pop_transform (void *paint_data)
   { func.pop_transform (this, paint_data,
                         !user_data ? nullptr : user_data->pop_transform); }
+  bool color_glyph (void *paint_data,
+                    hb_codepoint_t glyph,
+                    hb_font_t *font)
+  { return func.color_glyph (this, paint_data,
+                             glyph,
+                             font,
+                             !user_data ? nullptr : user_data->push_clip_glyph); }
   void push_clip_glyph (void *paint_data,
                         hb_codepoint_t glyph,
                         hb_font_t *font)
@@ -157,7 +165,7 @@ struct hb_paint_funcs_t
     float slant = font->slant_xy;
 
     push_transform (paint_data,
-                    xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0);
+		    xscale/upem, 0, slant * yscale/upem, yscale/upem, 0, 0);
   }
 
   void push_inverse_root_transform (void *paint_data,
@@ -169,7 +177,7 @@ struct hb_paint_funcs_t
     float slant = font->slant_xy;
 
     push_transform (paint_data,
-                    upem/xscale, 0, -slant * upem/xscale, upem/yscale, 0, 0);
+		    upem/xscale, 0, -slant * upem/xscale, upem/yscale, 0, 0);
   }
 
   HB_NODISCARD
@@ -180,7 +188,7 @@ struct hb_paint_funcs_t
       return false;
 
     push_transform (paint_data,
-                    1.f, 0.f, 0.f, 1.f, dx, dy);
+		    1.f, 0.f, 0.f, 1.f, dx, dy);
     return true;
   }
 
@@ -192,7 +200,7 @@ struct hb_paint_funcs_t
       return false;
 
     push_transform (paint_data,
-                    sx, 0.f, 0.f, sy, 0.f, 0.f);
+		    sx, 0.f, 0.f, sy, 0.f, 0.f);
     return true;
   }
 

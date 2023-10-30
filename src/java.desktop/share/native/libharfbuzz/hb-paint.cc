@@ -54,6 +54,12 @@ static void
 hb_paint_pop_transform_nil (hb_paint_funcs_t *funcs, void *paint_data,
                             void *user_data) {}
 
+static hb_bool_t
+hb_paint_color_glyph_nil (hb_paint_funcs_t *funcs, void *paint_data,
+                          hb_codepoint_t glyph,
+                          hb_font_t *font,
+                          void *user_data) { return false; }
+
 static void
 hb_paint_push_clip_glyph_nil (hb_paint_funcs_t *funcs, void *paint_data,
                               hb_codepoint_t glyph,
@@ -320,10 +326,10 @@ hb_paint_funcs_destroy (hb_paint_funcs_t *funcs)
  **/
 hb_bool_t
 hb_paint_funcs_set_user_data (hb_paint_funcs_t *funcs,
-                             hb_user_data_key_t *key,
-                             void *              data,
-                             hb_destroy_func_t   destroy,
-                             hb_bool_t           replace)
+			     hb_user_data_key_t *key,
+			     void *              data,
+			     hb_destroy_func_t   destroy,
+			     hb_bool_t           replace)
 {
   return hb_object_set_user_data (funcs, key, data, destroy, replace);
 }
@@ -342,7 +348,7 @@ hb_paint_funcs_set_user_data (hb_paint_funcs_t *funcs,
  **/
 void *
 hb_paint_funcs_get_user_data (const hb_paint_funcs_t *funcs,
-                             hb_user_data_key_t       *key)
+			     hb_user_data_key_t       *key)
 {
   return hb_object_get_user_data (funcs, key);
 }
@@ -409,10 +415,10 @@ hb_color_line_get_color_stops (hb_color_line_t *color_line,
                                hb_color_stop_t *color_stops)
 {
   return color_line->get_color_stops (color_line,
-                                      color_line->data,
-                                      start, count,
-                                      color_stops,
-                                      color_line->get_color_stops_user_data);
+				      color_line->data,
+				      start, count,
+				      color_stops,
+				      color_line->get_color_stops_user_data);
 }
 
 /**
@@ -429,8 +435,8 @@ hb_paint_extend_t
 hb_color_line_get_extend (hb_color_line_t *color_line)
 {
   return color_line->get_extend (color_line,
-                                 color_line->data,
-                                 color_line->get_extend_user_data);
+				 color_line->data,
+				 color_line->get_extend_user_data);
 }
 
 
@@ -471,6 +477,25 @@ void
 hb_paint_pop_transform (hb_paint_funcs_t *funcs, void *paint_data)
 {
   funcs->pop_transform (paint_data);
+}
+
+/**
+ * hb_paint_color_glyph:
+ * @funcs: paint functions
+ * @paint_data: associated data passed by the caller
+ * @glyph: the glyph ID
+ * @font: the font
+ *
+ * Perform a "color-glyph" paint operation.
+ *
+ * Since: 8.2.0
+ */
+hb_bool_t
+hb_paint_color_glyph (hb_paint_funcs_t *funcs, void *paint_data,
+                      hb_codepoint_t glyph,
+                      hb_font_t *font)
+{
+  return funcs->color_glyph (paint_data, glyph, font);
 }
 
 /**

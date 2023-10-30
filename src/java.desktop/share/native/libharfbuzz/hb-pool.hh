@@ -58,7 +58,7 @@ struct hb_pool_t
     if (unlikely (!next))
     {
       if (unlikely (!chunks.alloc (chunks.length + 1))) return nullptr;
-      chunk_t *chunk = (chunk_t *) hb_calloc (1, sizeof (chunk_t));
+      chunk_t *chunk = (chunk_t *) hb_malloc (sizeof (chunk_t));
       if (unlikely (!chunk)) return nullptr;
       chunks.push (chunk);
       next = chunk->thread ();
@@ -89,7 +89,7 @@ struct hb_pool_t
     T* thread ()
     {
       for (unsigned i = 0; i < ARRAY_LENGTH (arrayZ) - 1; i++)
-        * (T**) &arrayZ[i] = &arrayZ[i + 1];
+	* (T**) &arrayZ[i] = &arrayZ[i + 1];
 
       * (T**) &arrayZ[ARRAY_LENGTH (arrayZ) - 1] = nullptr;
 

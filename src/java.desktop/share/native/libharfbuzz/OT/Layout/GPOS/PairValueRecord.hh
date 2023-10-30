@@ -16,13 +16,13 @@ struct PairValueRecord
 
   protected:
   typename Types::HBGlyphID
-                secondGlyph;            /* GlyphID of second glyph in the
+	        secondGlyph;            /* GlyphID of second glyph in the
                                          * pair--first glyph is listed in the
                                          * Coverage table */
   ValueRecord   values;                 /* Positioning data for the first glyph
                                          * followed by for second glyph */
   public:
-  DEFINE_SIZE_ARRAY (Types::size, values);
+  DEFINE_SIZE_ARRAY (Types::HBGlyphID::static_size, values);
 
   int cmp (hb_codepoint_t k) const
   { return secondGlyph.cmp (k); }

@@ -21,8 +21,8 @@ struct SubsetGlyph
   bool allocated;
 
   bool serialize (hb_serialize_context_t *c,
-                  bool use_short_loca,
-                  const hb_subset_plan_t *plan)
+		  bool use_short_loca,
+		  const hb_subset_plan_t *plan) const
   {
     TRACE_SERIALIZE (this);
 
@@ -40,7 +40,7 @@ struct SubsetGlyph
     pad = 0;
     while (pad_length > 0)
     {
-      c->embed (pad);
+      (void) c->embed (pad);
       pad_length--;
     }
 
@@ -51,14 +51,14 @@ struct SubsetGlyph
     {
       hb_codepoint_t new_gid;
       if (plan->new_gid_for_old_gid (_.get_gid(), &new_gid))
-        const_cast<CompositeGlyphRecord &> (_).set_gid (new_gid);
+	const_cast<CompositeGlyphRecord &> (_).set_gid (new_gid);
     }
 #ifndef HB_NO_VAR_COMPOSITES
     for (auto &_ : Glyph (dest_glyph).get_var_composite_iterator ())
     {
       hb_codepoint_t new_gid;
       if (plan->new_gid_for_old_gid (_.get_gid(), &new_gid))
-        const_cast<VarCompositeGlyphRecord &> (_).set_gid (new_gid);
+	const_cast<VarCompositeGlyphRecord &> (_).set_gid (new_gid);
     }
 #endif
 
@@ -75,18 +75,18 @@ struct SubsetGlyph
       const char *end = dest_glyph.arrayZ + dest_glyph.length;
       while (it)
       {
-        auto &rec = const_cast<CompositeGlyphRecord &> (*it);
-        ++it;
+	auto &rec = const_cast<CompositeGlyphRecord &> (*it);
+	++it;
 
-        q += rec.get_size ();
+	q += rec.get_size ();
 
-        rec.lower_gid_24_to_16 ();
+	rec.lower_gid_24_to_16 ();
 
-        unsigned size = rec.get_size ();
+	unsigned size = rec.get_size ();
 
-        memmove (p, &rec, size);
+	memmove (p, &rec, size);
 
-        p += size;
+	p += size;
       }
       memmove (p, q, end - q);
       p += end - q;

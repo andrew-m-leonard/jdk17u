@@ -98,15 +98,15 @@ struct MarkBasePosFormat1_2
      * ...but stop if we find a mark in the MultipleSubst sequence:
      * https://github.com/harfbuzz/harfbuzz/issues/1020 */
     return !_hb_glyph_info_multiplied (&buffer->info[idx]) ||
-           0 == _hb_glyph_info_get_lig_comp (&buffer->info[idx]) ||
-           (idx == 0 ||
-            _hb_glyph_info_is_mark (&buffer->info[idx - 1]) ||
-            !_hb_glyph_info_multiplied (&buffer->info[idx - 1]) ||
-            _hb_glyph_info_get_lig_id (&buffer->info[idx]) !=
-            _hb_glyph_info_get_lig_id (&buffer->info[idx - 1]) ||
-            _hb_glyph_info_get_lig_comp (&buffer->info[idx]) !=
-            _hb_glyph_info_get_lig_comp (&buffer->info[idx - 1]) + 1
-            );
+	   0 == _hb_glyph_info_get_lig_comp (&buffer->info[idx]) ||
+	   (idx == 0 ||
+	    _hb_glyph_info_is_mark (&buffer->info[idx - 1]) ||
+	    !_hb_glyph_info_multiplied (&buffer->info[idx - 1]) ||
+	    _hb_glyph_info_get_lig_id (&buffer->info[idx]) !=
+	    _hb_glyph_info_get_lig_id (&buffer->info[idx - 1]) ||
+	    _hb_glyph_info_get_lig_comp (&buffer->info[idx]) !=
+	    _hb_glyph_info_get_lig_comp (&buffer->info[idx - 1]) + 1
+	    );
   }
 
   bool apply (hb_ot_apply_context_t *c) const
@@ -134,14 +134,14 @@ struct MarkBasePosFormat1_2
       if (match == skippy_iter.MATCH)
       {
         // https://github.com/harfbuzz/harfbuzz/issues/4124
-        if (!accept (buffer, j - 1) &&
-            NOT_COVERED == (this+baseCoverage).get_coverage  (buffer->info[j - 1].codepoint))
-          match = skippy_iter.SKIP;
+	if (!accept (buffer, j - 1) &&
+	    NOT_COVERED == (this+baseCoverage).get_coverage  (buffer->info[j - 1].codepoint))
+	  match = skippy_iter.SKIP;
       }
       if (match == skippy_iter.MATCH)
       {
-        c->last_base = (signed) j - 1;
-        break;
+	c->last_base = (signed) j - 1;
+	break;
       }
     }
     c->last_base_until = buffer->idx;
@@ -197,9 +197,10 @@ struct MarkBasePosFormat1_2
     if (!out->markCoverage.serialize_serialize (c->serializer, new_coverage.iter ()))
       return_trace (false);
 
-    out->markArray.serialize_subset (c, markArray, this,
-                                     (this+markCoverage).iter (),
-                                     &klass_mapping);
+    if (unlikely (!out->markArray.serialize_subset (c, markArray, this,
+						    (this+markCoverage).iter (),
+						    &klass_mapping)))
+      return_trace (false);
 
     unsigned basecount = (this+baseArray).rows;
     auto base_iter =
@@ -228,11 +229,9 @@ struct MarkBasePosFormat1_2
       ;
     }
 
-    out->baseArray.serialize_subset (c, baseArray, this,
-                                     base_iter.len (),
-                                     base_indexes.iter ());
-
-    return_trace (true);
+    return_trace (out->baseArray.serialize_subset (c, baseArray, this,
+						   base_iter.len (),
+						   base_indexes.iter ()));
   }
 };
 

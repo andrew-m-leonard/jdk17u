@@ -71,8 +71,8 @@ struct SinglePosFormat1
     if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
     {
       c->buffer->message (c->font,
-                          "positioning glyph at %u",
-                          c->buffer->idx);
+			  "positioning glyph at %u",
+			  c->buffer->idx);
     }
 
     valueFormat.apply_value (c, this, values, buffer->cur_pos());
@@ -80,8 +80,8 @@ struct SinglePosFormat1
     if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
     {
       c->buffer->message (c->font,
-                          "positioned glyph at %u",
-                          c->buffer->idx);
+			  "positioned glyph at %u",
+			  c->buffer->idx);
     }
 
     buffer->idx++;
@@ -90,9 +90,10 @@ struct SinglePosFormat1
 
   bool
   position_single (hb_font_t           *font,
-                   hb_direction_t       direction,
-                   hb_codepoint_t       gid,
-                   hb_glyph_position_t &pos) const
+		   hb_blob_t           *table_blob,
+		   hb_direction_t       direction,
+		   hb_codepoint_t       gid,
+		   hb_glyph_position_t &pos) const
   {
     unsigned int index = (this+coverage).get_coverage  (gid);
     if (likely (index == NOT_COVERED)) return false;
@@ -100,7 +101,7 @@ struct SinglePosFormat1
     /* This is ugly... */
     hb_buffer_t buffer;
     buffer.props.direction = direction;
-    OT::hb_ot_apply_context_t c (1, font, &buffer);
+    OT::hb_ot_apply_context_t c (1, font, &buffer, table_blob);
 
     valueFormat.apply_value (&c, this, values, pos);
     return true;

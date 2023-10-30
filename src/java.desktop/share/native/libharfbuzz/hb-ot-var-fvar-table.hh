@@ -39,6 +39,24 @@
 
 namespace OT {
 
+static bool axis_coord_pinned_or_within_axis_range (const hb_array_t<const F16DOT16> coords,
+                                                    unsigned axis_index,
+                                                    Triple axis_limit)
+{
+  float axis_coord = coords[axis_index].to_float ();
+  if (axis_limit.is_point ())
+  {
+    if (axis_limit.minimum != axis_coord)
+      return false;
+  }
+  else
+  {
+    if (axis_coord < axis_limit.minimum ||
+        axis_coord > axis_limit.maximum)
+      return false;
+  }
+  return true;
+}
 
 struct InstanceRecord
 {
@@ -46,6 +64,27 @@ struct InstanceRecord
 
   hb_array_t<const F16DOT16> get_coordinates (unsigned int axis_count) const
   { return coordinatesZ.as_array (axis_count); }
+
+  bool keep_instance (unsigned axis_count,
+                      const hb_map_t *axes_index_tag_map,
+                      const hb_hashmap_t<hb_tag_t, Triple> *axes_location) const
+  {
+    if (axes_location->is_empty ()) return true;
+    const hb_array_t<const F16DOT16> coords = get_coordinates (axis_count);
+    for (unsigned i = 0 ; i < axis_count; i++)
+    {
+      uint32_t *axis_tag;
+      if (!axes_index_tag_map->has (i, &axis_tag))
+        return false;
+      if (!axes_location->has (*axis_tag))
+        continue;
+      
+      Triple axis_limit = axes_location->get (*axis_tag);
+      if (!axis_coord_pinned_or_within_axis_range (coords, i, axis_limit))
+        return false;
+    }
+    return true;
+  }
 
   bool subset (hb_subset_context_t *c,
                unsigned axis_count,
@@ -56,19 +95,22 @@ struct InstanceRecord
     if (unlikely (!c->serializer->embed (flags))) return_trace (false);
 
     const hb_array_t<const F16DOT16> coords = get_coordinates (axis_count);
-    const hb_hashmap_t<hb_tag_t, float> *axes_location = &c->plan->user_axes_location;
+    const hb_hashmap_t<hb_tag_t, Triple> *axes_location = &c->plan->user_axes_location;
     for (unsigned i = 0 ; i < axis_count; i++)
     {
       uint32_t *axis_tag;
+      Triple *axis_limit;
       // only keep instances whose coordinates == pinned axis location
-      if (!c->plan->axes_old_index_tag_map.has (i, &axis_tag)) continue;
-
-      if (axes_location->has (*axis_tag) &&
-          fabsf (axes_location->get (*axis_tag) - coords[i].to_float ()) > 0.001f)
-        return_trace (false);
-
-      if (!c->plan->axes_index_map.has (i))
-        continue;
+      if (!c->plan->axes_old_index_tag_map.has (i, &axis_tag)) return_trace (false);
+      if (axes_location->has (*axis_tag, &axis_limit))
+      {
+        if (!axis_coord_pinned_or_within_axis_range (coords, i, *axis_limit))
+          return_trace (false);
+        
+        //skip pinned axis
+        if (axis_limit->is_point ())
+          continue;
+      }
 
       if (!c->serializer->embed (coords[i]))
         return_trace (false);
@@ -89,18 +131,18 @@ struct InstanceRecord
   {
     TRACE_SANITIZE (this);
     return_trace (c->check_struct (this) &&
-                  c->check_array (coordinatesZ.arrayZ, axis_count));
+		  c->check_array (coordinatesZ.arrayZ, axis_count));
   }
 
   protected:
-  NameID        subfamilyNameID;/* The name ID for entries in the 'name' table
-                                 * that provide subfamily names for this instance. */
-  HBUINT16      flags;          /* Reserved for future use — set to 0. */
+  NameID	subfamilyNameID;/* The name ID for entries in the 'name' table
+				 * that provide subfamily names for this instance. */
+  HBUINT16	flags;		/* Reserved for future use — set to 0. */
   UnsizedArrayOf<F16DOT16>
-                coordinatesZ;   /* The coordinates array for this instance. */
-  //NameID      postScriptNameIDX;/*Optional. The name ID for entries in the 'name'
-  //                              * table that provide PostScript names for this
-  //                              * instance. */
+		coordinatesZ;	/* The coordinates array for this instance. */
+  //NameID	postScriptNameIDX;/*Optional. The name ID for entries in the 'name'
+  //				  * table that provide PostScript names for this
+  //				  * instance. */
 
   public:
   DEFINE_SIZE_UNBOUNDED (4);
@@ -112,7 +154,7 @@ struct AxisRecord
 
   enum
   {
-    AXIS_FLAG_HIDDEN    = 0x0001,
+    AXIS_FLAG_HIDDEN	= 0x0001,
   };
 
 #ifndef HB_DISABLE_DEPRECATED
@@ -186,16 +228,40 @@ struct AxisRecord
     return defaultValue.to_float ();
   }
 
+  TripleDistances get_triple_distances () const
+  {
+    float min, default_, max;
+    get_coordinates (min, default_, max);
+    return TripleDistances (min, default_, max);
+  }
+
+  bool subset (hb_subset_context_t *c) const
+  {
+    TRACE_SUBSET (this);
+    auto *out = c->serializer->embed (this);
+    if (unlikely (!out)) return_trace (false);
+
+    const hb_hashmap_t<hb_tag_t, Triple>& user_axes_location = c->plan->user_axes_location;
+    Triple *axis_limit;
+    if (user_axes_location.has (axisTag, &axis_limit))
+    {
+      out->minValue.set_float (axis_limit->minimum);
+      out->defaultValue.set_float (axis_limit->middle);
+      out->maxValue.set_float (axis_limit->maximum);
+    }
+    return_trace (true);
+  }
+
   public:
-  Tag           axisTag;        /* Tag identifying the design variation for the axis. */
+  Tag		axisTag;	/* Tag identifying the design variation for the axis. */
   protected:
-  F16DOT16      minValue;       /* The minimum coordinate value for the axis. */
-  F16DOT16      defaultValue;   /* The default coordinate value for the axis. */
-  F16DOT16      maxValue;       /* The maximum coordinate value for the axis. */
+  F16DOT16	minValue;	/* The minimum coordinate value for the axis. */
+  F16DOT16	defaultValue;	/* The default coordinate value for the axis. */
+  F16DOT16	maxValue;	/* The maximum coordinate value for the axis. */
   public:
-  HBUINT16      flags;          /* Axis flags. */
-  NameID        axisNameID;     /* The name ID for entries in the 'name' table that
-                                 * provide a display name for this axis. */
+  HBUINT16	flags;		/* Axis flags. */
+  NameID	axisNameID;	/* The name ID for entries in the 'name' table that
+				 * provide a display name for this axis. */
 
   public:
   DEFINE_SIZE_STATIC (20);
@@ -211,40 +277,41 @@ struct fvar
   {
     TRACE_SANITIZE (this);
     return_trace (version.sanitize (c) &&
-                  likely (version.major == 1) &&
-                  c->check_struct (this) &&
-                  axisSize == 20 && /* Assumed in our code. */
-                  instanceSize >= axisCount * 4 + 4 &&
-                  get_axes ().sanitize (c) &&
-                  c->check_range (get_instance (0), instanceCount, instanceSize));
+		  likely (version.major == 1) &&
+		  c->check_struct (this) &&
+		  axisSize == 20 && /* Assumed in our code. */
+		  instanceSize >= axisCount * 4 + 4 &&
+		  get_axes ().sanitize (c) &&
+		  c->check_range (&StructAfter<InstanceRecord> (get_axes ()),
+				  instanceCount, instanceSize));
   }
 
   unsigned int get_axis_count () const { return axisCount; }
 
 #ifndef HB_DISABLE_DEPRECATED
   unsigned int get_axes_deprecated (unsigned int      start_offset,
-                                    unsigned int     *axes_count /* IN/OUT */,
-                                    hb_ot_var_axis_t *axes_array /* OUT */) const
+				    unsigned int     *axes_count /* IN/OUT */,
+				    hb_ot_var_axis_t *axes_array /* OUT */) const
   {
     if (axes_count)
     {
       hb_array_t<const AxisRecord> arr = get_axes ().sub_array (start_offset, axes_count);
       for (unsigned i = 0; i < arr.length; ++i)
-        arr[i].get_axis_deprecated (&axes_array[i]);
+	arr[i].get_axis_deprecated (&axes_array[i]);
     }
     return axisCount;
   }
 #endif
 
   unsigned int get_axis_infos (unsigned int           start_offset,
-                               unsigned int          *axes_count /* IN/OUT */,
-                               hb_ot_var_axis_info_t *axes_array /* OUT */) const
+			       unsigned int          *axes_count /* IN/OUT */,
+			       hb_ot_var_axis_info_t *axes_array /* OUT */) const
   {
     if (axes_count)
     {
       hb_array_t<const AxisRecord> arr = get_axes ().sub_array (start_offset, axes_count);
       for (unsigned i = 0; i < arr.length; ++i)
-        arr[i].get_axis_info (start_offset + i, &axes_array[i]);
+	arr[i].get_axis_info (start_offset + i, &axes_array[i]);
     }
     return axisCount;
   }
@@ -293,42 +360,40 @@ struct fvar
   }
 
   unsigned int get_instance_coords (unsigned int  instance_index,
-                                    unsigned int *coords_length, /* IN/OUT */
-                                    float        *coords         /* OUT */) const
+				    unsigned int *coords_length, /* IN/OUT */
+				    float        *coords         /* OUT */) const
   {
     const InstanceRecord *instance = get_instance (instance_index);
     if (unlikely (!instance))
     {
       if (coords_length)
-        *coords_length = 0;
+	*coords_length = 0;
       return 0;
     }
 
     if (coords_length && *coords_length)
     {
       hb_array_t<const F16DOT16> instanceCoords = instance->get_coordinates (axisCount)
-                                                         .sub_array (0, coords_length);
+							 .sub_array (0, coords_length);
       for (unsigned int i = 0; i < instanceCoords.length; i++)
-        coords[i] = instanceCoords.arrayZ[i].to_float ();
+	coords[i] = instanceCoords.arrayZ[i].to_float ();
     }
     return axisCount;
   }
 
-  void collect_name_ids (hb_hashmap_t<hb_tag_t, float> *user_axes_location,
-                         hb_set_t *nameids  /* IN/OUT */) const
+  void collect_name_ids (hb_hashmap_t<hb_tag_t, Triple> *user_axes_location,
+			 hb_map_t *axes_old_index_tag_map,
+			 hb_set_t *nameids  /* IN/OUT */) const
   {
     if (!has_data ()) return;
-    hb_map_t pinned_axes;
 
     auto axis_records = get_axes ();
     for (unsigned i = 0 ; i < (unsigned)axisCount; i++)
     {
       hb_tag_t axis_tag = axis_records[i].get_axis_tag ();
-      if (user_axes_location->has (axis_tag))
-      {
-        pinned_axes.set (i, axis_tag);
+      if (user_axes_location->has (axis_tag) &&
+          user_axes_location->get (axis_tag).is_point ())
         continue;
-      }
 
       nameids->add (axis_records[i].get_name_id ());
     }
@@ -337,16 +402,7 @@ struct fvar
     {
       const InstanceRecord *instance = get_instance (i);
 
-      if (hb_any (+ hb_enumerate (instance->get_coordinates (axisCount))
-                  | hb_filter (pinned_axes, hb_first)
-                  | hb_map ([&] (const hb_pair_t<unsigned, const F16DOT16&>& _)
-                            {
-                              hb_tag_t axis_tag = pinned_axes.get (_.first);
-                              float location = user_axes_location->get (axis_tag);
-                              if (fabs ((double)location - (double)_.second.to_float ()) > 0.001) return true;
-                              return false;
-                            })
-                  ))
+      if (!instance->keep_instance (axisCount, axes_old_index_tag_map, user_axes_location))
         continue;
 
       nameids->add (instance->subfamilyNameID);
@@ -384,21 +440,25 @@ struct fvar
     for (unsigned i = 0 ; i < (unsigned)axisCount; i++)
     {
       if (!c->plan->axes_index_map.has (i)) continue;
-      if (unlikely (!c->serializer->embed (axes_records[i])))
+      if (unlikely (!axes_records[i].subset (c)))
         return_trace (false);
     }
 
     if (!c->serializer->check_assign (out->firstAxis, get_size (), HB_SERIALIZE_ERROR_INT_OVERFLOW))
       return_trace (false);
 
+    unsigned num_retained_instances = 0;
     for (unsigned i = 0 ; i < (unsigned)instanceCount; i++)
     {
       const InstanceRecord *instance = get_instance (i);
       auto snap = c->serializer->snapshot ();
       if (!instance->subset (c, axisCount, has_postscript_nameid))
         c->serializer->revert (snap);
+      else
+        num_retained_instances++;
     }
-    return_trace (true);
+
+    return_trace (c->serializer->check_assign (out->instanceCount, num_retained_instances, HB_SERIALIZE_ERROR_INT_OVERFLOW));
   }
 
   public:
@@ -409,25 +469,25 @@ struct fvar
   {
     if (unlikely (i >= instanceCount)) return nullptr;
    return &StructAtOffset<InstanceRecord> (&StructAfter<InstanceRecord> (get_axes ()),
-                                           i * instanceSize);
+					   i * instanceSize);
   }
 
   protected:
-  FixedVersion<>version;        /* Version of the fvar table
-                                 * initially set to 0x00010000u */
+  FixedVersion<>version;	/* Version of the fvar table
+				 * initially set to 0x00010000u */
   Offset16To<AxisRecord>
-                firstAxis;      /* Offset in bytes from the beginning of the table
-                                 * to the start of the AxisRecord array. */
-  HBUINT16      reserved;       /* This field is permanently reserved. Set to 2. */
-  HBUINT16      axisCount;      /* The number of variation axes in the font (the
-                                 * number of records in the axes array). */
-  HBUINT16      axisSize;       /* The size in bytes of each VariationAxisRecord —
-                                 * set to 20 (0x0014) for this version. */
-  HBUINT16      instanceCount;  /* The number of named instances defined in the font
-                                 * (the number of records in the instances array). */
-  HBUINT16      instanceSize;   /* The size in bytes of each InstanceRecord — set
-                                 * to either axisCount * sizeof(F16DOT16) + 4, or to
-                                 * axisCount * sizeof(F16DOT16) + 6. */
+		firstAxis;	/* Offset in bytes from the beginning of the table
+				 * to the start of the AxisRecord array. */
+  HBUINT16	reserved;	/* This field is permanently reserved. Set to 2. */
+  HBUINT16	axisCount;	/* The number of variation axes in the font (the
+				 * number of records in the axes array). */
+  HBUINT16	axisSize;	/* The size in bytes of each VariationAxisRecord —
+				 * set to 20 (0x0014) for this version. */
+  HBUINT16	instanceCount;	/* The number of named instances defined in the font
+				 * (the number of records in the instances array). */
+  HBUINT16	instanceSize;	/* The size in bytes of each InstanceRecord — set
+				 * to either axisCount * sizeof(F16DOT16) + 4, or to
+				 * axisCount * sizeof(F16DOT16) + 6. */
 
   public:
   DEFINE_SIZE_STATIC (16);
